@@ -3,33 +3,33 @@ import 'dart:math' as math; // import this
 
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:firebase_dynamic_links/firebase_dynamic_links.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:hmssdk_flutter/hmssdk_flutter.dart';
 import 'package:lottie/lottie.dart';
+import 'package:wakelock/wakelock.dart';
 import 'package:zebolive/core/constant/app_animations.dart';
-import 'package:zebolive/core/enum/user_enum.dart';
 import 'package:zebolive/core/utils/global.dart';
 import 'package:zebolive/core/utils/size_config.dart';
 import 'package:zebolive/ui/screen/live/controller/live_streaming_contoller.dart';
+import 'package:zebolive/ui/shared/liveScreenFooter/controller/comments/comments_controller.dart';
 import 'package:zebolive/ui/shared/liveScreenFooter/controller/pk_live_controller.dart';
 
 import '../../../../core/constant/app_colors.dart';
 import '../../../../core/constant/app_images.dart';
 import '../../../../core/model/live/live_detail_model.dart';
 import '../../../../core/model/live/live_list_model.dart';
+import '../../../../core/model/live/live_message_model.dart';
 import '../../../shared/audio_video_control.dart';
 import '../../../shared/cached_network_image_view.dart';
-import '../../../shared/keyboard_visible.dart';
 import '../../../shared/liveScreenFooter/controller/gift/gift_file_controller.dart';
-import '../../../shared/liveScreenHeader/widgets/bottom_profile_screen.dart';
-import '../../../shared/liveScreenFooter/widgets/fab_menu_button.dart';
-import '../../../shared/liveScreenHeader/live_screen_header_controller.dart';
-import '../../../shared/live_comment_box.dart';
 import '../../../shared/liveScreenFooter/live_screen_footer.dart';
+import '../../../shared/liveScreenFooter/widgets/fab_menu_button.dart';
 import '../../../shared/liveScreenHeader/live_screen_header.dart';
+import '../../../shared/liveScreenHeader/live_screen_header_controller.dart';
+import '../../../shared/liveScreenHeader/widgets/bottom_profile_screen.dart';
+import '../../../shared/live_comment_box.dart';
 import 'gift_animation.dart';
 
 class LiveScreen extends StatefulWidget {
@@ -44,64 +44,32 @@ class _LiveScreenState extends State<LiveScreen> with WidgetsBindingObserver {
   PageController controller = PageController();
   LiveStreamingController liveStreamingController =
       Get.find<LiveStreamingController>();
-  String? id;
+  LiveScreenHeaderController liveScreenHeaderController =
+      Get.put(LiveScreenHeaderController());
+  TextEditingController msg = TextEditingController();
+
+  FocusNode inputNode = FocusNode();
   @override
   void deactivate() {
     super.deactivate();
-    // Wakelock.disable();
+    Wakelock.disable();
   }
 
   @override
   void initState() {
     super.initState();
-    fetchLinkData();
     WidgetsBinding.instance!.addObserver(this);
-    // Wakelock.enable();
+    Wakelock.enable();
     if (widget.liveListDetails == null) {
       liveStreamingController.startLive();
-      log("live Screenlkjhygf");
-      print(
-          'liveId-------------liveId-------${liveStreamingController.liveModel.liveId}');
     } else {
       liveStreamingController.joinLive(liveId: widget.liveListDetails!.liveId);
-      print("live Screen Id==${widget.liveListDetails!.liveId}");
-    }
-    if (id == null) {
-      liveStreamingController.startLive();
-      log("live Screenlkjhygf");
-      print('liveId----deeplink---------liveId-------$id');
-    } else {
-      liveStreamingController.joinLive(liveId: int.parse(id!));
-      print("live Screen Id==$id");
-    }
-  }
-
-  void fetchLinkData() async {
-    // FirebaseDynamicLinks.getInitialLInk does a call to firebase to get us the real link because we have shortened it.
-    var link = await FirebaseDynamicLinks.instance.getInitialLink();
-
-    // This link may exist if the app was opened fresh so we'll want to handle it the same way onLink will.
-    handleLinkData(link!);
-    // This will handle incoming links if the application is already opened
-    FirebaseDynamicLinks.instance.onLink;
-  }
-
-  void handleLinkData(PendingDynamicLinkData data) {
-    final Uri? uri = data.link;
-    if (uri != null) {
-      final queryParams = uri.queryParameters;
-      if (queryParams.length > 0) {
-        id = queryParams['liveid'];
-        // verify the username is parsed correctly
-        print("My join id: $id");
-      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     log("LiveScreen BUILD");
-
     return WillPopScope(
       onWillPop: () async {
         Get.find<LiveScreenHeaderController>().quitLive();
@@ -131,210 +99,144 @@ class _LiveScreenState extends State<LiveScreen> with WidgetsBindingObserver {
                     }
                   },
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const LiveScreenHeader(),
-                    // if (liveStreamingController.myTrack != null ||
-                    //     liveStreamingController.pkTrack != null)
-                    const AudioVideoControl(),
-                    const Spacer(),
-                    const LiveCommentBox(),
-                    LiveScreenFooter(),
-                  ],
+                Container(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      LiveScreenHeader(),
+                      AudioVideoControl(),
+                      Spacer(),
+                      SingleChildScrollView(child: const LiveCommentBox()),
+                      GetBuilder<CommentsController>(
+                        builder: (controller) {
+                          if (controller.isOpen.value) {
+                            intilizeNode();
+                          }
+
+                          return controller.isOpen.value
+                              ? Container(
+                                  height: 280,
+                                  color: Colors.white,
+                                  child: Column(
+                                    children: [
+                                      TextField(
+                                        // onChanged: (value) {
+                                        //   // value = controller.mobileNumberController.text;
+                                        // },
+                                        // controller: controller.mobileNumberController,
+                                        controller: msg,
+                                        focusNode: inputNode,
+                                        style: const TextStyle(
+                                            color: Colors.black),
+                                        keyboardType: TextInputType.text,
+                                        decoration: InputDecoration(
+                                          isDense: true,
+                                          prefix: SizedBox(width: getWidth(20)),
+                                          border: InputBorder.none,
+                                          hintText: "Comments",
+                                          hintStyle: const TextStyle(
+                                              color: Colors.grey),
+                                          suffix: GestureDetector(
+                                            onTap: () {
+                                              LiveStreamingController liveS =
+                                                  Get.put(
+                                                      LiveStreamingController());
+                                              LiveMessageModel
+                                                  liveMessageModel =
+                                                  LiveMessageModel();
+                                              liveMessageModel.message =
+                                                  msg.text;
+                                              liveMessageModel.userId = 1234;
+                                              liveS.addMessage(
+                                                  liveMessageModel:
+                                                      liveMessageModel);
+
+                                              print(
+                                                  'MessageList ${liveStreamingController.messageList[0].message}');
+                                            },
+                                            child: Container(
+                                                margin: EdgeInsets.only(
+                                                    right: getWidth(10)),
+                                                child: Text("send".tr)),
+                                          ),
+                                        ),
+                                      )
+                                    ],
+                                  ),
+                                )
+                              : SizedBox();
+                        },
+                      ),
+                      LiveScreenFooter()
+                    ],
+                  ),
                 ),
-                FabButton(
-                    liveId: "${liveStreamingController.liveModel.liveId}"),
+                FabButton(),
                 GetBuilder(
                   builder: (GiftFileController giftFileController) {
-                    print('LIVEID:-${widget.liveListDetails?.liveId}');
-
                     return giftFileController.giftLottieFileQueue.isNotEmpty &&
                             !giftFileController.isGiftLottieShowing
                         ? showGiftAnimation(giftFileController)
                         : Container();
                   },
                 ),
+
                 // chatWidget(),
-                KeyboardVisibilityBuilder(
-                    builder: (context, child, isKeyboardVisible) {
-                  liveStreamingController.isHMSMessageTap = isKeyboardVisible;
-                  return GetBuilder(builder:
-                      (LiveStreamingController liveStreamingController) {
-                    return liveStreamingController.isHMSMessageTap
-                        ? Container(
-                            height: getHeight(400),
-                            color: Colors.teal,
-                            child: Padding(
-                              padding: EdgeInsets.only(bottom: getHeight(50)),
-                              child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Container(
-                                      padding: EdgeInsets.symmetric(
-                                          vertical: getHeight(12),
-                                          horizontal: getWidth(15)),
-                                      height: getHeight(300),
-                                      width: double.infinity,
-                                      color: AppColors.kScaffoldColor,
-                                      child: SingleChildScrollView(
-                                        reverse: true,
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.end,
-                                          children: [
-                                            Container(
-                                              height: getHeight(250),
-                                              child: ListView.separated(
-                                                  itemBuilder: (_, int) {
-                                                    return Container(
-                                                      height: getHeight(35),
-                                                      decoration: BoxDecoration(
-                                                          color: AppColors
-                                                              .kLoginTextColors,
-                                                          borderRadius:
-                                                              BorderRadius
-                                                                  .circular(
-                                                                      getHeight(
-                                                                          10))),
-                                                      child: Row(children: [
-                                                        Container(
-                                                          margin:
-                                                              EdgeInsets.only(
-                                                                  left:
-                                                                      getHeight(
-                                                                          5)),
-                                                          height: getHeight(30),
-                                                          width: getHeight(30),
-                                                          decoration: const BoxDecoration(
-                                                              image: DecorationImage(
-                                                                  image: AssetImage(
-                                                                      AppImages
-                                                                          .pandaIcon))),
-                                                        ),
-                                                        RichText(
-                                                          text: TextSpan(
-                                                              text:
-                                                                  "User name\t" +
-                                                                      ":\t",
-                                                              style: TextStyle(
-                                                                  color: AppColors
-                                                                      .kLoginPageWhiteColor,
-                                                                  fontSize:
-                                                                      getHeight(
-                                                                          14),
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w700),
-                                                              children: [
-                                                                TextSpan(
-                                                                  text:
-                                                                      "Message",
-                                                                  style: TextStyle(
-                                                                      color: AppColors
-                                                                          .userProfileBgColor,
-                                                                      fontSize:
-                                                                          getHeight(
-                                                                              14),
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .w400),
-                                                                )
-                                                              ]),
-                                                        )
-                                                      ]),
-                                                    );
-                                                  },
-                                                  separatorBuilder: (_, int) {
-                                                    return Padding(
-                                                      padding:
-                                                          EdgeInsets.symmetric(
-                                                              vertical:
-                                                                  getHeight(6)),
-                                                    );
-                                                  },
-                                                  itemCount: 10),
-                                            ),
-                                            Container(
-                                              margin: EdgeInsets.symmetric(
-                                                  horizontal: getHeight(20)),
-                                              decoration: BoxDecoration(
-                                                border: Border.all(
-                                                    color: Colors.white),
-                                                borderRadius:
-                                                    BorderRadius.circular(5),
-                                              ),
-                                              child: TextField(
-                                                // onChanged: (value) {
-                                                //   // value = controller.mobileNumberController.text;
-                                                // },
-                                                // controller: controller.mobileNumberController,
-                                                style: TextStyle(
-                                                    color: AppColors
-                                                        .userProfileBgColor),
-                                                keyboardType:
-                                                    TextInputType.text,
-                                                decoration: InputDecoration(
-                                                  isDense: true,
-                                                  prefix: SizedBox(
-                                                      width: getWidth(20)),
-                                                  border: InputBorder.none,
-                                                  hintText: "Comments",
-                                                  hintStyle: TextStyle(
-                                                      color: AppColors
-                                                          .kLoginPageWhiteColor),
-                                                  suffix: GestureDetector(
-                                                    child: Container(
-                                                        margin: EdgeInsets.only(
-                                                            right:
-                                                                getWidth(10)),
-                                                        child: Text("send".tr)),
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                    // Container(
-                                    //   margin: EdgeInsets.symmetric(
-                                    //       horizontal: getHeight(20)),
-                                    //   decoration: BoxDecoration(
-                                    //     border: Border.all(color: Colors.white),
-                                    //     borderRadius: BorderRadius.circular(5),
-                                    //   ),
-                                    //   child: TextField(
-                                    //     // onChanged: (value) {
-                                    //     //   // value = controller.mobileNumberController.text;
-                                    //     // },
-                                    //     // controller: controller.mobileNumberController,
-                                    //     style: TextStyle(
-                                    //         color: AppColors.userProfileBgColor),
-                                    //     keyboardType: TextInputType.text,
-                                    //     decoration: InputDecoration(
-                                    //       isDense: true,
-                                    //       prefix: SizedBox(width: getWidth(20)),
-                                    //       border: InputBorder.none,
-                                    //       hintText: "Comments",
-                                    //       hintStyle: TextStyle(
-                                    //           color:
-                                    //               AppColors.kLoginPageWhiteColor),
-                                    //       suffix: GestureDetector(
-                                    //         child: Container(
-                                    //             margin: EdgeInsets.only(
-                                    //                 right: getWidth(10)),
-                                    //             child: Text("send".tr)),
-                                    //       ),
-                                    //     ),
-                                    //   ),
-                                    // ),
-                                  ]),
-                            ),
-                          )
-                        : Container();
-                  });
-                })
+                // Spacer(),
+                // KeyboardVisibilityBuilder(
+                //     builder: (context, child, isKeyboardVisible) {
+                //   // liveScreenHeaderController.isOpenKeyboard = isKeyboardVisible;
+                //   return GetBuilder(builder:
+                //       (LiveScreenHeaderController liveScreenHeaderController) {
+                //     return liveScreenHeaderController.isOpenKeyboard == true
+                //         ? Container(
+                //             margin:
+                //                 EdgeInsets.symmetric(horizontal: getHeight(20)),
+                //             decoration: BoxDecoration(
+                //               border: Border.all(color: Colors.white),
+                //               borderRadius: BorderRadius.circular(5),
+                //             ),
+                //             child: TextField(
+                //               // onChanged: (value) {
+                //               //   // value = controller.mobileNumberController.text;
+                //               // },
+                //               // controller: controller.mobileNumberController,
+                //               controller: msg,
+                //               style: const TextStyle(
+                //                   color: AppColors.userProfileBgColor),
+                //               keyboardType: TextInputType.text,
+                //               decoration: InputDecoration(
+                //                 isDense: true,
+                //                 prefix: SizedBox(width: getWidth(20)),
+                //                 border: InputBorder.none,
+                //                 hintText: "Comments",
+                //                 hintStyle: const TextStyle(
+                //                     color: AppColors.kLoginPageWhiteColor),
+                //                 suffix: GestureDetector(
+                //                   onTap: () {
+                //                     LiveStreamingController liveS =
+                //                         Get.put(LiveStreamingController());
+                //                     LiveMessageModel liveMessageModel =
+                //                         LiveMessageModel();
+                //                     liveMessageModel.message = msg.text;
+                //                     liveMessageModel.userId = 1234;
+                //                     liveS.addMessage(
+                //                         liveMessageModel: liveMessageModel);
+                //
+                //                     print(
+                //                         'MessageList ${liveStreamingController.messageList[0].message}');
+                //                   },
+                //                   child: Container(
+                //                       margin:
+                //                           EdgeInsets.only(right: getWidth(10)),
+                //                       child: Text("send".tr)),
+                //                 ),
+                //               ),
+                //             ),
+                //           )
+                //         : Container();
+                //   });
+                // })
               ]),
             ),
           )),
@@ -481,15 +383,6 @@ class _LiveScreenState extends State<LiveScreen> with WidgetsBindingObserver {
                       ),
                     ),
                   ),
-                  // if(pkLiveController.opponent!.isFollowing == 0)
-                  //   GestureDetector(
-                  //     onTap: () {
-                  //       pkLiveController.followLiveUser(pkLiveController.opponent!.id);
-                  //     },
-                  //     child: Image(
-                  //         height: getHeight(25),
-                  //         image: const AssetImage(AppImages.plusLiveImage)),
-                  //   )
                 ],
               ),
             );
@@ -708,19 +601,6 @@ class _LiveScreenState extends State<LiveScreen> with WidgetsBindingObserver {
     super.didChangeAppLifecycleState(state);
     log("LiveScreen didChangeAppLifecycleState $state");
     if (state == AppLifecycleState.resumed) {
-      // List<HMSPeer>? peersList = await _meetingStore.getPeers();
-      //
-      // peersList?.forEach((element) {
-      //   if (!element.isLocal) {
-      //     (element.audioTrack as HMSRemoteAudioTrack?)?.setVolume(10.0);
-      //     element.auxiliaryTracks?.forEach((element) {
-      //       if (element.kind == HMSTrackKind.kHMSTrackKindAudio) {
-      //         (element as HMSRemoteAudioTrack?)?.setVolume(10.0);
-      //       }
-      //     });
-      //   }
-      // });
-
       if (liveStreamingController.isVideoOn) {
         liveStreamingController.startCapturing();
       } else {
@@ -736,185 +616,8 @@ class _LiveScreenState extends State<LiveScreen> with WidgetsBindingObserver {
       }
     }
   }
-}
 
-chatWidget() {
-  return showModalBottomSheet(
-      backgroundColor: Colors.transparent,
-      context: Get.context as BuildContext,
-      builder: (context) {
-        return const ChatWidget();
-      });
-}
-
-class ChatWidget extends StatefulWidget {
-  const ChatWidget({Key? key}) : super(key: key);
-
-  @override
-  _ChatWidgetState createState() => _ChatWidgetState();
-}
-
-class _ChatWidgetState extends State<ChatWidget> {
-  LiveStreamingController liveStreamingController =
-      Get.find<LiveStreamingController>();
-
-  @override
-  Widget build(BuildContext context) {
-    return KeyboardVisibilityBuilder(
-        builder: (context, child, isKeyboardVisible) {
-      liveStreamingController.isHMSMessageTap = isKeyboardVisible;
-      return GetBuilder(
-          builder: (LiveStreamingController liveStreamingController) {
-        return liveStreamingController.isHMSMessageTap
-            ? Container(
-                height: getHeight(400),
-                color: Colors.teal,
-                child: Padding(
-                  padding: EdgeInsets.only(bottom: getHeight(50)),
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Container(
-                          padding: EdgeInsets.symmetric(
-                              vertical: getHeight(12),
-                              horizontal: getWidth(15)),
-                          height: getHeight(300),
-                          width: double.infinity,
-                          color: AppColors.kScaffoldColor,
-                          child: SingleChildScrollView(
-                            reverse: true,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Container(
-                                  height: getHeight(250),
-                                  child: ListView.separated(
-                                      itemBuilder: (_, int) {
-                                        return Container(
-                                          height: getHeight(35),
-                                          decoration: BoxDecoration(
-                                              color: AppColors.kLoginTextColors,
-                                              borderRadius:
-                                                  BorderRadius.circular(
-                                                      getHeight(10))),
-                                          child: Row(children: [
-                                            Container(
-                                              margin: EdgeInsets.only(
-                                                  left: getHeight(5)),
-                                              height: getHeight(30),
-                                              width: getHeight(30),
-                                              decoration: BoxDecoration(
-                                                  image: DecorationImage(
-                                                      image: AssetImage(
-                                                          AppImages
-                                                              .pandaIcon))),
-                                            ),
-                                            RichText(
-                                              text: TextSpan(
-                                                  text: "User name\t" + ":\t",
-                                                  style: TextStyle(
-                                                      color: AppColors
-                                                          .kLoginPageWhiteColor,
-                                                      fontSize: getHeight(14),
-                                                      fontWeight:
-                                                          FontWeight.w700),
-                                                  children: [
-                                                    TextSpan(
-                                                      text: "Message",
-                                                      style: TextStyle(
-                                                          color: AppColors
-                                                              .userProfileBgColor,
-                                                          fontSize:
-                                                              getHeight(14),
-                                                          fontWeight:
-                                                              FontWeight.w400),
-                                                    )
-                                                  ]),
-                                            )
-                                          ]),
-                                        );
-                                      },
-                                      separatorBuilder: (_, int) {
-                                        return Padding(
-                                          padding: EdgeInsets.symmetric(
-                                              vertical: getHeight(6)),
-                                        );
-                                      },
-                                      itemCount: 10),
-                                ),
-                                Container(
-                                  margin: EdgeInsets.symmetric(
-                                      horizontal: getHeight(20)),
-                                  decoration: BoxDecoration(
-                                    border: Border.all(color: Colors.white),
-                                    borderRadius: BorderRadius.circular(5),
-                                  ),
-                                  child: TextField(
-                                    // onChanged: (value) {
-                                    //   // value = controller.mobileNumberController.text;
-                                    // },
-                                    // controller: controller.mobileNumberController,
-                                    style: TextStyle(
-                                        color: AppColors.userProfileBgColor),
-                                    keyboardType: TextInputType.text,
-                                    decoration: InputDecoration(
-                                      isDense: true,
-                                      prefix: SizedBox(width: getWidth(20)),
-                                      border: InputBorder.none,
-                                      hintText: "Comments",
-                                      hintStyle: TextStyle(
-                                          color:
-                                              AppColors.kLoginPageWhiteColor),
-                                      suffix: GestureDetector(
-                                        child: Container(
-                                            margin: EdgeInsets.only(
-                                                right: getWidth(10)),
-                                            child: Text("send".tr)),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        // Container(
-                        //   margin: EdgeInsets.symmetric(
-                        //       horizontal: getHeight(20)),
-                        //   decoration: BoxDecoration(
-                        //     border: Border.all(color: Colors.white),
-                        //     borderRadius: BorderRadius.circular(5),
-                        //   ),
-                        //   child: TextField(
-                        //     // onChanged: (value) {
-                        //     //   // value = controller.mobileNumberController.text;
-                        //     // },
-                        //     // controller: controller.mobileNumberController,
-                        //     style: TextStyle(
-                        //         color: AppColors.userProfileBgColor),
-                        //     keyboardType: TextInputType.text,
-                        //     decoration: InputDecoration(
-                        //       isDense: true,
-                        //       prefix: SizedBox(width: getWidth(20)),
-                        //       border: InputBorder.none,
-                        //       hintText: "Comments",
-                        //       hintStyle: TextStyle(
-                        //           color:
-                        //               AppColors.kLoginPageWhiteColor),
-                        //       suffix: GestureDetector(
-                        //         child: Container(
-                        //             margin: EdgeInsets.only(
-                        //                 right: getWidth(10)),
-                        //             child: Text("send".tr)),
-                        //       ),
-                        //     ),
-                        //   ),
-                        // ),
-                      ]),
-                ),
-              )
-            : Container();
-      });
-    });
+  void intilizeNode() {
+    FocusScope.of(context).requestFocus(inputNode);
   }
 }
